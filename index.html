@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>Mapa en Tiempo Real</title>
+        <style>
+            body, html {
+                margin: 0;
+                padding: 0;
+                height: 100%;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                background-color: #eaeaea; /* Color de fondo general */
+                background-image: url('https://bulgogichan.files.wordpress.com/2015/05/high-quality-space-wallpapers-and-stars-hd-space-wallpapers-1080p-portrait.jpg');
+                background-size: cover; /* Asegúrate de que la imagen cubra toda la página */
+                background-position: center; /* Centra la imagen en la página */
+                background-repeat: no-repeat; /* Evita que la imagen se repita */
+                background-attachment: fixed; /* Hace que la imagen de fondo permanezca fija durante el desplazamiento */
+            }
+            #globalContainer {
+                width: 100%; /* Ancho del contenedor global */
+                height: 80%; /* Altura del contenedor global */
+                display: flex;
+                box-shadow: 0 0 10px 0 rgba(0,0,0,0.5); /* Sombra para dar efecto de elevación */
+                background-color: #eaeaea;
+            }
+            #temperatureContainer {
+                text-align: center; /* Centrar el texto */
+                color: #333; /* Color del texto */
+                font-size: 20px; /* Tamaño del texto */
+                padding: 10px; /* Espaciado interno */
+            }
+            #mapContainer, #restContainer {
+                width: 50%; /* Ocupa la mitad de la anchura del contenedor global */
+                height: 100%; /* Toda la altura del contenedor global */
+                overflow: hidden; /* Evita el desbordamiento del contenido */
+            }
+            #mapContainer{
+                float: left;
+            }
+            #restContainer{
+                float: right;
+            }
+            canvas {
+                display: block;
+                width: 95%;
+                height: 95%;
+                padding-top: 16px;
+                padding-left: 13px;
+            }
+            #restContainer {
+                background-color: #6ba4ff; /* Color de fondo para los registros */
+                overflow-y: scroll; /* Permite desplazamiento vertical si es necesario */
+            }
+            #logContainer {
+                overflow-y: scroll; /* Permite desplazamiento vertical si es necesario */
+                text-align: center; /* Centrar el texto */
+                color: black; /* Color del texto */
+                font-size: 20px; /* Tamaño del texto */
+                padding: 0px 20px 30px 20px; /* Espaciado interno */
+                margin-left: 10px;
+                margin-right: 10px;
+                height: 87%;
+            }
+
+            #logContainer > p{
+                font-size: 10px;
+                border: solid 0.5px #7dafff; /* Borde superior */
+                padding: 10px;
+                background-color: #3f89ff;
+                margin-top: 0;
+                margin-bottom: 0;
+                max-width: 600px; /* Ajusta este valor según sea necesario */
+                word-wrap: break-word;
+                white-space: pre-wrap; /* Se respetan los saltos y los espacios en blanco*/
+            }
+        </style>
+
+        <script src="https://code.jquery.com/jquery-3.6.4.min.js"></script>
+
+        <script>
+            const api_engine_addr = '192.168.1.33:5002';
+
+            const backgroundImage = new Image();
+            backgroundImage.src = '../img/Disney_Pictures.jpeg';
+
+            backgroundImage.onload = function() {
+                drawBackground(); // Once the image is loaded, draw the background
+            };
+
+            const droneImage = new Image();
+            droneImage.src = '../img/drone-amarillo.png';
+            const droneSize = 40;
+
+            function drawBackground() {
+                const canvas = document.getElementById('droneCanvas');
+                const ctx = canvas.getContext('2d');
+            
+                // Set canvas dimensions to match window size
+                canvas.width = 1000;
+                canvas.height = 1000;
+            
+                // Draw the background image
+                ctx.drawImage(backgroundImage, 0, 0, canvas.width, canvas.height);
+            
+                // Start updating the board after drawing the background
+                updateBoard();
+            }
+            
+            function drawGrid(ctx) {
+                const canvas = document.getElementById('droneCanvas');
+                const gridSize = 50; // Tamaño de cada cuadrado de la cuadrícula
+                const numCols = Math.floor(canvas.width / gridSize);
+                const numRows = Math.floor(canvas.height / gridSize);
+            
+                ctx.strokeStyle = 'rgba(0, 0, 0, 0.2)'; // Color de las líneas de la cuadrícula
+                ctx.lineWidth = 1; // Grosor de las líneas
+            
+                // Dibujar líneas verticales
+                for (let i = 0; i <= numCols; i++) {
+                    ctx.beginPath();
+                    ctx.moveTo(i * gridSize, 0);
+                    ctx.lineTo(i * gridSize, canvas.height);
+                    ctx.stroke();
+                }
+            
+                // Dibujar líneas horizontales
+                for (let j = 0; j <= numRows; j++) {
+                    ctx.beginPath();
+                    ctx.moveTo(0, j * gridSize);
+                    ctx.lineTo(canvas.width, j * gridSize);
+                    ctx.stroke();
+                }
+            }
+            
+            function drawBoard(boardData) {
+                const canvas = document.getElementById('droneCanvas');
+                const ctx = canvas.getContext('2d');
+            
+                // Limpiar el canvas antes de redibujar
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+                // Redibujar la imagen de fondo
+                ctx.drawImage(backgroundImage, 0, 0, canvas.width, canvas.height);
+            
+                // Dibujar la cuadrícula
+                drawGrid(ctx);
+
+                for (const droneId in boardData) {
+                    if (Object.hasOwnProperty.call(boardData, droneId)) {
+                        const drone = boardData[droneId];
+                        const col = drone.POS[0];
+                        const fil = drone.POS[1];
+                        const status = drone.status;
+            
+                        const xPos = 50 * col + 25;
+                        const yPos = 50 * fil + 25;
+            
+                        // Elegir el color del círculo en base al status
+                        let circleColor = 'black'; // Color por defecto
+                        if (status === 'N') {
+                            circleColor = 'black'; // Color para el estado 'N'
+                        } else if (status === 'Y') {
+                            circleColor = 'green'; // Color para el estado 'Y'
+                        } else if (status === 'X') {
+                            circleColor = 'red'; // Color para el estado 'X'
+                        }
+            
+                        // Dibujar el círculo
+                        ctx.beginPath();
+                        ctx.arc(xPos, yPos, droneSize / 2, 0, Math.PI * 2);
+                        ctx.fillStyle = circleColor;
+                        ctx.fill();
+            
+                        // Dibujar el ID del dron en el centro del círculo
+                        ctx.fillStyle = 'white'; // Color del texto
+                        ctx.font = 'bold 16px Arial'; // Tamaño y estilo del texto
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'middle';
+                        ctx.fillText(droneId, xPos, yPos); // Ajustar la posición del texto
+                    }
+                }
+            }
+
+            function updateBoard() {
+                $.ajax({
+                    url: 'https://' + api_engine_addr + '/request_mapa',
+                    type: 'GET',
+                    dataType: 'json',
+                    success: function(data) {
+                        drawBoard(data.board);
+                        updateTemperature(data.temperature);
+                        updateLogs(data.logs);
+                    },
+                    error: function(xhr, status, error) {
+                        console.error('Error al obtener el mapa:', error);
+                    },
+                    complete: function() {
+                        setTimeout(updateBoard, 1000); // 1 segundo
+                    }
+                });
+            }
+
+            function updateLogs(logs) {
+                var logContainer = document.getElementById('logContainer');
+                logs.forEach(function(log) {
+                    var logEntry = document.createElement('p');
+                    logEntry.textContent = log;  // Añadir cada registro como un párrafo
+                    logContainer.appendChild(logEntry);
+                });
+            }
+            
+
+            function updateTemperature(temperature) {
+                document.getElementById('temperatureContainer').textContent = `Temperatura: ${temperature}°C`;
+            }
+
+        </script>
+
+    </head>
+    <body>
+
+        <div id="globalContainer">
+            <div id="mapContainer">
+                <canvas id="droneCanvas"></canvas>
+            </div>
+            <div id="restContainer">
+                <div id="temperatureContainer">Temperatura: --°C</div>
+                <div id="logContainer"></div>
+            </div>
+        </div>
+
+    </body>
+</html>
