@@ -588,10 +588,10 @@ def perform(option):
                                 movement.start()
                         else:
                             partition = message.partition  # Obtener la partición del mensaje
-                            print(f"Engine en la partición {partition}, No te entiendo, clave {load_clave_simetrica(DRONE_NAME[0])}")
+                            print(f"Engine in partition {partition}, I do not understand you, key {load_clave_simetrica(DRONE_NAME[0])}")
                                     
-                            registrar_auditoria('Error al descifrar mensaje',
-                                            f"Engine, No te entiendo",
+                            registrar_auditoria('Error decrypting message',
+                                            f"Engine, I do not understand you",
                                             'localhost')
                             
                             registerDroneAPI()
@@ -641,14 +641,14 @@ def readBoards():
                                 BOARD = board_data
                                 display.update(BOARD)
                             except json.JSONDecodeError as e:
-                                print(f"Error al decodificar JSON: {e}")
+                                print(f"Error decoding JSON: {e}")
                             except Exception as e:
-                                print(f"Error inesperado: {e}")
+                                print(f"Unexpected error: {e}")
                         else:
-                            print(f"Engine, No te entiendo")
+                            print(f"Engine, I do not understand you")
             
-                            registrar_auditoria('Error al descifrar mensaje',
-                                            f"Engine, No te entiendo",
+                            registrar_auditoria('Error decrypting message',
+                                            f"Engine, I do not understand you",
                                             'localhost')
         except Exception as e:
             print(f"{ERROR} Error al leer el BOARD: {e}")
@@ -737,13 +737,13 @@ if __name__ == "__main__":
                 name = sys.argv[4].split(':', 2)
                 DRONE_NAME = (name[0], name[1])
                 
-                opt = input(f"{Style.BRIGHT}¿Qué quieres hacer?{R} \n 1. Registrarte \n 2. Unirse al espectáculo\n 3. Apagar dron \n Introduce tu opcion (1-3):")
+                opt = input(f"{Style.BRIGHT}How do you want to proceed{R} \n 1. Register \n 2. Join the show\n 3. Dhut down drone \n Select your option (1-3):")
 
                 if opt == '1':
                     registerDroneAPI()
 
                 elif opt == '2':
-                    sn = input(f"{Style.BRIGHT}¿Quieres mostrar el mapa?{Style.DIM}(s/n):{R}").lower()
+                    sn = input(f"{Style.BRIGHT}Do you wish to show the map?{Style.DIM}(s/n):{R}").lower()
                     
                     if sn =='s':
                         MAP = True
