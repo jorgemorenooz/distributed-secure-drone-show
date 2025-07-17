@@ -1,10 +1,9 @@
-# Distributed Secure Drone Show
+# # 🛰️ Distributed Secure Drone Show
 
 <p align="center">
   <img src="https://i.pinimg.com/originals/bc/f3/a3/bcf3a371b9303c27752e1109e96a2fe6.gif" alt="Drone GIF">
 </p>
 
-# 🛰️ Art with Drones
 Art with Drones is a distributed system simulating a coordinated drone light show. Drones move across a grid to form figures in real time, managed by a central engine, with secure communication, resilience to failure, and visual monitoring.
 
 # 📁 Project Structure
@@ -66,27 +65,19 @@ python front.py
 ```
 Then open `https://<your_ip>:5004/front` in a browser.
 
----
-
 # 🎨 Visualization Options
 - Pygame GUI: Shows drone positions with IDs and statuses (N, Y, X)
 - Web UI: Displays drone map, temperature, and activity logs
-
----
 
 # 🔑 Security
 - TLS: All socket and HTTPS communication is encrypted
 - Token Auth: Drones register and authenticate using unique tokens
 - Symmetric Encryption: Kafka messages are encrypted using Fernet keys
 
----
-
 # 🛠️ Configuration
 - `AwD_figuras.json`: Define formations and scheduling
 - `ciudades.json`: Weather monitoring location
 - `openweather_key.txt`: API key for OpenWeather
-
----
 
 # 📋 Example Commands
 Register a drone via API and join the show:
