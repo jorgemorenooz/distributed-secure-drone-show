@@ -35,7 +35,6 @@ Art with Drones is a distributed system simulating a coordinated drone light sho
 # 🚀 How to Run
 ## 1. Prerequisites
 - Python 3.8+
-- MySQL Server
 - Apache Kafka & Zookeeper
 - Required Python packages:
 ```bash
