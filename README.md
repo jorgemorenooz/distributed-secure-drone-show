@@ -54,10 +54,10 @@ bin/kafka-server-start.sh config/server.properties
 python AD_Registry.py <PORT Registry>
 
 # Terminal 2: AD_Engine
-python AD_Engine.py 8081 5 localhost:9092
+python AD_Engine.py <PORT Engine> <MAX Drones> <IP Broker>:<PORT Broker>
 
 # Terminal 3+: One per drone
-python AD_Drone.py <IP Engine>:<PORT Engine> localhost:9092 <IP Registry>:<PORT Registry> <OPTION> <ID Drone>:<NAME Drone>
+python AD_Drone.py <IP Engine>:<PORT Engine> <IP Broker>:<PORT Broker> <IP Registry>:<PORT Registry> <OPTION> <ID Drone>:<NAME Drone>
 python AD_Drone.py <IP Engine>:<PORT Engine> <IP Registry>:<PORT Registry> <OPTION> <ID Drone>:<NAME Drone>
 # etc...
 
