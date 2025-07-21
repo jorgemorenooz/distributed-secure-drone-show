@@ -14,7 +14,7 @@ from typing import Optional
 from AD_Display import Display
 from flask import Flask, request
 from flask import jsonify
-from flask_mysqldb import MySQL
+# from flask_mysqldb import MySQL
 from flask_cors import CORS
 import requests
 from datetime import datetime
@@ -49,11 +49,11 @@ ERROR = f"{Fore.RED}{Style.BRIGHT}[ERROR]{R}"
 NEWCON = f"{Fore.CYAN}{Style.BRIGHT}[NEW CONNECTION]{R}"
 
 app = Flask(__name__)
-app.config['MYSQL_HOST'] = 'localhost'
+""" app.config['MYSQL_HOST'] = 'localhost'
 app.config['MYSQL_USER'] = 'root'
 app.config['MYSQL_PASSWORD'] = 'SD2023'
 app.config['MYSQL_DB'] = 'registry'
-mysql = MySQL(app)
+mysql = MySQL(app) """
 server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 

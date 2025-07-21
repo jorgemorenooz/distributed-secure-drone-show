@@ -10,7 +10,7 @@ from typing import Optional
 from getpass import getpass
 from flask import Flask, request
 from flask import jsonify
-from flask_mysqldb import MySQL
+# from flask_mysqldb import MySQL
 import bcrypt
 from datetime import datetime, timedelta
 import base64
@@ -33,12 +33,12 @@ CERT_FILE = './certificados/certificado_registry.crt'
 colorama_init()
 
 app = Flask(__name__)
-app.config['MYSQL_HOST'] = 'localhost'
+""" app.config['MYSQL_HOST'] = 'localhost'
 
 app.config['MYSQL_USER'] = 'root'
 app.config['MYSQL_PASSWORD'] = 'SD2023'
 app.config['MYSQL_DB'] = 'registry'
-mysql = MySQL(app)
+mysql = MySQL(app) """
 BBDD_FILE = "drone_credentials.json"
 
 def getOwnIP():

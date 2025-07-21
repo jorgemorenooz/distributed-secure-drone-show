@@ -1,17 +1,17 @@
 from flask import Flask, send_file
-from flask_mysqldb import MySQL
+# from flask_mysqldb import MySQL
 import socket
 from flask import Flask, send_from_directory
 
 FORMAT = 'utf-8'
 
 app = Flask(__name__)
-app.config['MYSQL_HOST'] = 'localhost'
+""" app.config['MYSQL_HOST'] = 'localhost'
 
 app.config['MYSQL_USER'] = 'root'
 app.config['MYSQL_PASSWORD'] = 'SD2023'
 app.config['MYSQL_DB'] = 'registry'
-mysql = MySQL(app)
+mysql = MySQL(app) """
 
 def getOwnIP():
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
