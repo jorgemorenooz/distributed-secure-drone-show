@@ -7,3 +7,7 @@ keys_Drone/
 log/
 login_para_Drones/
 drone_credentials.json
+cert/certificate_engine.crt
+cert/certificate_registry.crt
+cert/private_key_engine.pem
+cert/private_key_registry.pem
