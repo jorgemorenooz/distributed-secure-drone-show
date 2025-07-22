@@ -105,8 +105,6 @@ def msgWrap(msg:str):
     return b'\x02' + msg + b'\x03' + str(lrc).encode(FORMAT)
  
 def msgUnwrap(msg) -> Optional[str]:
- 
-    #print(f"unwrapping msg {msg}")
     read = ''
     for i,c in enumerate(msg[1:]):
         if msg[i+1] == 3:
@@ -221,7 +219,6 @@ def registerDroneAPI():
         # Verificar la respuesta y guardar el token
         if response.status_code == 200:
             token = response.json()['data']['token']
-            print(f"{Fore.GREEN}Token: {token}{R}")
             saveToken(token)
             print(f"{SUCCESS} Registration successful.{R}")
         else:
@@ -323,7 +320,6 @@ def registerDrone():
 
                 if messages:
                     saveToken(messages.split(' ')[1])
-                    print(f"{Fore.GREEN}Token: {messages.split(' ')[1]}{R}")
                     print(f"{Fore.GREEN}{Style.BRIGHT}Registration successful.{Style.RESET_ALL}")
 
     except ConnectionRefusedError as c:

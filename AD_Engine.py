@@ -300,7 +300,6 @@ def authDrone(conn, addr):
             global PERFORMING
             
             clave_simetrica = Fernet.generate_key()
-            print('Clave simetrica: ', clave_simetrica)
             save_symetric_key(idSent, clave_simetrica)
             
             if idSent in DRONES:
@@ -316,7 +315,7 @@ def authDrone(conn, addr):
                     
                     conn.send(msgWrap(f"2 {partition} {pos_recovery} {clave_simetrica.decode()}"))
                     conn.close()
-                    sleep(1) #Para que guarde la clave simetrica
+                    sleep(1)
                     
                     PERFORMING[idSent] = {"status": False, "position": pos_recovery}
                     
@@ -948,7 +947,6 @@ def auth_drone():
             global PERFORMING
             
             symetric_key = Fernet.generate_key()
-            print('Clave simetrica: ', symetric_key)
             save_symetric_key(idSent, symetric_key)
 
             if idSent in DRONES:
