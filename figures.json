@@ -1,0 +1,32 @@
+{
+  "figuras": [
+    {
+      "Nombre": "Cuadrado Básico",
+      "Drones": [
+        { "ID": 1, "POS": "2,2" },
+        { "ID": 2, "POS": "2,5" },
+        { "ID": 3, "POS": "5,2" },
+        { "ID": 4, "POS": "5,5" }
+      ]
+    },
+    {
+      "Nombre": "Línea Horizontal",
+      "Drones": [
+        { "ID": 1, "POS": "3,3" },
+        { "ID": 2, "POS": "3,4" },
+        { "ID": 3, "POS": "3,5" },
+        { "ID": 4, "POS": "3,6" }
+      ]
+    },
+    {
+      "Nombre": "Cruz Central",
+      "Drones": [
+        { "ID": 1, "POS": "4,5" },
+        { "ID": 2, "POS": "5,5" },
+        { "ID": 3, "POS": "6,5" },
+        { "ID": 4, "POS": "5,4" },
+        { "ID": 5, "POS": "5,6" }
+      ]
+    }
+  ]
+}

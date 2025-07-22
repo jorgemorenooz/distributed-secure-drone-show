@@ -1,7 +1,7 @@
 import socket
 import threading
 import json
-from os import stat, system, path, makedirs
+from os import path, makedirs
 from sys import argv
 from time import sleep, time
 from kafka import KafkaConsumer, KafkaProducer, TopicPartition
@@ -29,8 +29,8 @@ log = logging.getLogger('werkzeug')
 log.setLevel(logging.ERROR)
 
 FORMAT = 'utf-8'
-KEY_FILE = './certificados/clave_privada_registry.pem'
-CERT_FILE = './certificados/certificado_registry.crt'
+KEY_FILE = './cert/private_key_engine.pem'
+CERT_FILE = './cert/certificate_engine.crt'
 OPEN_WEATHER_KEY = '000000'
 temperature = 0
 new_logs  = []
@@ -76,7 +76,7 @@ if len(argv) >=4:
 
     DB_FILE = 'drone_credentials.json'
     SOCK_FORMAT = 'utf-8'
-    FIG_FILE = 'AwD_figuras.json'
+    FIG_FILE = 'figures.json'
     DRONE_RECOVERY = './drone_recovery'
     WEATH_REPLY_SIZE = 1024
 
@@ -91,17 +91,15 @@ if len(argv) >=4:
     READY = False
     PERFORMING = {}
     SHOW_IN_ACTION = False
-    DRONE_COUNT = 0     # Dron agregado aqui cuando se autentica
-    ALIVE_DRONES = 0    # Dron agregado aqui cuando se autentica, quitado cuando pierde conexion
-    READY_DRONES = 0    # Dron agregado aqui cuando llega a su posicion de destino en una figura concreta
+    DRONE_COUNT = 0     # Authenticated drones
+    ALIVE_DRONES = 0    # Authenticated drones with active conection
+    READY_DRONES = 0    # Drones which arrived to its final position
     DRONES_WITH_POS = []
     REPLACEMENT_DRONES = {}
     
     BOARD = dict()
-    # {ID1: {"POS":[1,2], "status":status}, ID2:{}...}
     FIGURES = list()
-    DRONES = dict() # {ID:{"alias":alias,"partition":num,"token":token}, ...} Un dron es agregado a esta lista cuando se autentica
-                    # num es su particion en todos los topics
+    DRONES = dict()
 
     SHUTDOWN_SYSTEM = False
 
@@ -135,20 +133,20 @@ def msgUnwrap(msg) -> Optional[str]:
         return str(read, FORMAT)     
     return None
 
-def registrar_evento(accion, descripcion, ip):
+def register_event(accion, descripcion, ip):
     global new_logs
     filepath = path.join('./log', f"events.log")
     
     if not path.exists('./log'):
         makedirs('./log')
 
-    fecha = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    evento = f"{fecha} - IP: {ip}, Accion: {accion}, Descripcion: {descripcion}\n"
+    date = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    event = f"{date} - IP: {ip}, Event: {accion}, Description: {descripcion}\n"
     
     with open(filepath, 'a') as archivo:
-        archivo.write(evento)
+        archivo.write(event)
     
-    new_logs.append(evento)
+    new_logs.append(event)
     
 ################################
 #  KEEP TRACK OF FIGURE FILE   #
@@ -158,92 +156,102 @@ class FiguraCambiadaHandler(FileSystemEventHandler):
     
     def __init__(self):
         self.timestamp = time()
+        self.load_figures()
+        
+    def load_figures(self):
+        global FIGURES
+        if not path.exists(FIG_FILE):
+            print(f"[WARNING] Figure file '{FIG_FILE}' not found. No figures loaded.")
+            FIGURES = []
+            return
+
         try:
             with open(FIG_FILE, 'r') as f:
-                global FIGURES
-                FIGURES = json.load(f)["figuras"]
-        except FileNotFoundError:
-            pass
+                data = json.load(f)
+                if "figuras" in data and isinstance(data["figuras"], list):
+                    FIGURES = data["figuras"]
+                    figNames = [x["Nombre"] for x in FIGURES]
+                    print(f"{NEW} Loaded figure list: {Fore.YELLOW}{Style.BRIGHT}{' · '.join(figNames)}{R}")
+                else:
+                    print("[WARNING] 'figuras' key missing or not a list. File ignored.")
+                    FIGURES = []
+        except json.JSONDecodeError as e:
+            print(f"[ERROR] Failed to parse '{FIG_FILE}': {e}")
+            FIGURES = []
+        except Exception as e:
+            print(f"[ERROR] Unexpected error loading figures: {e}")
+            FIGURES = []
 
-    # permite actualizar las figuras guardadas sin resetear el engine
-    # en vez de comprobar el archivo cada x segundos, solo se comprueba cuando es modificado
-    # si se edita en un editor de texto, fallara :)
     def on_modified(self, event):
-
         if time() - self.timestamp > 3 and event.src_path.endswith(FIG_FILE):
             self.timestamp = time()
-            with open(FIG_FILE, 'r') as f:
-                global FIGURES
-                FIGURES = json.load(f)["figuras"]
+            self.load_figures()
 
             figNames = [x["Nombre"] for x in FIGURES]
             
             print(f"{NEW} New schedule added with the following figures: {Fore.YELLOW}{Style.BRIGHT}{' · '.join(figNames)}{R}")
-            registrar_evento('Figura Añadida', f"nueva figura añadida: {figNames}", 'localhost')
+            register_event('Figure added', f"new figure added: {figNames}", 'localhost')
 
     def on_created(self, event):
-
         if time() - self.timestamp > 3 and event.src_path.endswith(FIG_FILE):
             self.timestamp = time()
-            with open(FIG_FILE, 'r') as f:
-                global FIGURES
-                FIGURES = json.load(f)["figuras"]
+            self.load_figures()
 
             figNames = [x["Nombre"] for x in FIGURES]
             
             print(f"{NEW} New schedule added with the following figures: {Fore.YELLOW}{Style.BRIGHT}{' · '.join(figNames)}{R}")
-            registrar_evento('Figura Añadida', f"nueva figura añadida: {figNames}", 'localhost')
+            register_event('Figure added', f"new figure added: {figNames}", 'localhost')
             
 #!###### CLAVE SIMETRICA ############
 
-def cifrar_mensaje(mensaje, clave_simetrica):
+def encode_message(message, symetric_key):
     try:
-        fernet = Fernet(clave_simetrica)
-        mensaje_cifrado = fernet.encrypt(mensaje.encode())
+        fernet = Fernet(symetric_key)
+        encoded_message = fernet.encrypt(message.encode())
     except Exception:
-        clave_simetrica = Fernet.generate_key()
-        fernet = Fernet(clave_simetrica)
-        mensaje_cifrado = fernet.encrypt(mensaje.encode())
-    return mensaje_cifrado.decode(FORMAT)
+        symetric_key = Fernet.generate_key()
+        fernet = Fernet(symetric_key)
+        encoded_message = fernet.encrypt(message.encode())
+    return encoded_message.decode(FORMAT)
 
-def descifrar_mensaje(mensaje_cifrado, clave_simetrica):
+def decode_message(encoded_message, symetric_key):
     try:
-        fernet = Fernet(clave_simetrica)
+        fernet = Fernet(symetric_key)
     except Exception:
-        clave_simetrica = Fernet.generate_key()
-        fernet = Fernet(clave_simetrica)
+        symetric_key = Fernet.generate_key()
+        fernet = Fernet(symetric_key)
     
     try:
-        mensaje_a_cifrar = mensaje_cifrado.decode('utf-8')
-        mensaje_descifrado = fernet.decrypt(mensaje_a_cifrar)  # Decodificar los bytes a una cadena
+        message_raw = encoded_message.decode('utf-8')
+        decoded_message = fernet.decrypt(message_raw)
         
-        return [json.loads(mensaje_descifrado), True]
+        return [json.loads(decoded_message), True]
     
     except Exception:
         
         return [None, False]
 
-def guardar_clave_simetrica(id_dron, clave):
+def save_symetric_key(id_dron, key):
     
-    filepath = path.join('./claves_Engine', f"{id_dron}.txt")
+    filepath = path.join('./keys_Engine', f"{id_dron}.txt")
     
-    if not path.exists('./claves_Engine'):
-        makedirs('./claves_Engine')
+    if not path.exists('./keys_Engine'):
+        makedirs('./keys_Engine')
         
     with open(filepath, 'w') as file:
-        file.write(str(clave.decode('utf-8')))
+        file.write(str(key.decode('utf-8')))
         
     sleep(1)
 
-def load_clave_simetrica(id_dron):
+def load_symetric_key(id_dron):
     
-    filepath = path.join('./claves_Engine', f"{id_dron}.txt")
+    filepath = path.join('./keys_Engine', f"{id_dron}.txt")
     
     try:
         with open(filepath, 'r') as file:
             return file.read()
     except Exception as e:
-        return Fernet.generate_key() # otra clave random y fallara el cifrado
+        return Fernet.generate_key()
 
 #!###################################
 
@@ -254,7 +262,7 @@ def load_clave_simetrica(id_dron):
 def authDrone(conn, addr):
     global BOARD
     print(f"{NEWCON}{Fore.CYAN} Drone at {Style.BRIGHT}{addr[0]}:{addr[1]}{Style.NORMAL} connected.{R}")
-    registrar_evento('Nueva conexion',
+    register_event('New connection',
                     f"Drone",
                     f"{addr[0]}:{addr[1]}")
     # qué tipo de mensaje es
@@ -280,8 +288,8 @@ def authDrone(conn, addr):
     
     if datetime.now() > token_expiry:
         print(f"{NEW_CONNECTION}{Fore.MAGENTA} Drone {idSent}:{aliasSent} {Fore.RED}{Style.BRIGHT}Token expirado.{R}")
-        registrar_evento('Autenticacion',
-                        f"Autenticacion fallida, token expirado",
+        register_event('Authentication',
+                        f"Authentication failed, token expired",
                         f"{addr[0]}:{addr[1]}")
         
         conn.send(msgWrap(f"0"))
@@ -293,14 +301,14 @@ def authDrone(conn, addr):
             
             clave_simetrica = Fernet.generate_key()
             print('Clave simetrica: ', clave_simetrica)
-            guardar_clave_simetrica(idSent, clave_simetrica)
+            save_symetric_key(idSent, clave_simetrica)
             
             if idSent in DRONES:
                 
                 if (BOARD[idSent]["status"] == 'X') or (BOARD[idSent]["status"] == 'N' and SHOW_IN_ACTION):
                     print(f"{NEW_CONNECTION}{Fore.MAGENTA} Drone {idSent}:{aliasSent} has reestablished connection.{R}")
-                    registrar_evento('Autenticacion',
-                            f"Autenticacion de  Drone {idSent} exitosa (2)",
+                    register_event('Authentication',
+                            f"Authentication from Drone {idSent} successful (2)",
                             f"{addr[0]}:{addr[1]}")
                     
                     partition = DRONES[idSent]["partition"]
@@ -314,7 +322,7 @@ def authDrone(conn, addr):
                     
                 else:
                     print(f"{NEW_CONNECTION}{Fore.MAGENTA} Drone {idSent}:{aliasSent} has reestablished connection.{R}")
-                    registrar_evento('Nueva conexion',
+                    register_event('New connection',
                                     f"Drone ha reestablecido la conexion",
                                     f"{addr[0]}:{addr[1]}")
                     
@@ -336,8 +344,8 @@ def authDrone(conn, addr):
 
             print(f"{NEW_CONNECTION}{Fore.MAGENTA} Drone {idSent}:{aliasSent} {Fore.GREEN}{Style.BRIGHT}authenticated (1).{R}")
             
-            registrar_evento('Autenticacion',
-                            f"Autenticacion de  Drone {idSent} exitosa (1)",
+            register_event('Authentication',
+                            f"Authentication de  Drone {idSent} exitosa (1)",
                             f"{addr[0]}:{addr[1]}")
             
             conn.send(msgWrap(f"1 {idSent-1} {clave_simetrica.decode()}"))
@@ -347,7 +355,7 @@ def authDrone(conn, addr):
                 auto_offset_reset='latest',
                 enable_auto_commit=True,
                 group_id='engine',
-                value_deserializer=lambda x: descifrar_mensaje(x, load_clave_simetrica(idSent))
+                value_deserializer=lambda x: decode_message(x, load_symetric_key(idSent))
             )
 
             consumerCoordinates.assign([TopicPartition(KTOPIC_MOVES, DRONES[idSent]["partition"])])
@@ -368,8 +376,8 @@ def authDrone(conn, addr):
 
         else:
             print(f"{NEW_CONNECTION}{Fore.MAGENTA} Drone {idSent}:{aliasSent} {Fore.RED}{Style.BRIGHT}failed to authenticate.{R}")
-            registrar_evento('Autenticacion',
-                            f"Autenticacion de  Drone {idSent} fallida",
+            register_event('Authentication',
+                            f"Authentication from Drone {idSent} failed",
                             f"{addr[0]}:{addr[1]}")
             
             conn.send(msgWrap(f"0"))
@@ -397,7 +405,7 @@ def authDrone_setup():
                     thread.join()
                 else:
                     print(f"{Style.DIM}{Fore.CYAN}Drone attempted connection, but was rejected because there are no slots left.{R}")
-                    registrar_evento('Sockets Engine',
+                    register_event('Sockets Engine',
                                     f"conexion ha sido rechazada",
                                     f"{fromaddr[0]}:{fromaddr[1]}")
                     
@@ -408,7 +416,7 @@ def authDrone_setup():
 
             except Exception as e:
                 print(f"{ERROR} An error has occurred during registration: {e}")
-                registrar_evento('Sockets Engine',
+                register_event('Sockets Engine',
                                 f"Error Inesperado {e}",
                                 f"{fromaddr[0]}:{fromaddr[1]}")
                 connstream.shutdown(socket.SHUT_RDWR)
@@ -419,7 +427,7 @@ def authDrone_setup():
         pass
     except Exception as e:
         print(f"An unexpected exception occured while listening for drone connection -> {str(e)}")
-        registrar_evento('Sockets Engine',
+        register_event('Sockets Engine',
                         f"Error Inesperado {e}",
                         f"{fromaddr[0]}:{fromaddr[1]}")
         raise e
@@ -463,11 +471,11 @@ def dronesJOIN():
                     #5 4
                     position = [destinos[order][0], destinos[order][1]]
                     
-                    clave_simetrica = load_clave_simetrica(id)
+                    clave_simetrica = load_symetric_key(id)
 
                     # Preparar los datos para enviar
                     data = {"POS": f"{destinos[order][0]} {destinos[order][1]}"}
-                    data_cifrada = cifrar_mensaje(json.dumps(data), clave_simetrica)
+                    data_cifrada = encode_message(json.dumps(data), clave_simetrica)
 
                     # Enviar datos cifrados
                     droneOrdersProd.send(KTOPIC_ORDERS, value=data_cifrada, partition=DRONES[id]["partition"])
@@ -481,11 +489,11 @@ def dronesJOIN():
                 base = [0,0]
                 BOARD[id]["status"] = 'Y'
                 
-                clave_simetrica = load_clave_simetrica(id)
+                clave_simetrica = load_symetric_key(id)
 
                 # Preparar los datos para enviar
                 data = {"POS": f"{base[0]} {base[1]}"}
-                data_cifrada = cifrar_mensaje(json.dumps(data), clave_simetrica)
+                data_cifrada = encode_message(json.dumps(data), clave_simetrica)
 
                 # Enviar datos cifrados
                 droneOrdersProd.send(KTOPIC_ORDERS, value=data_cifrada, partition=DRONES[id]["partition"])
@@ -501,7 +509,7 @@ def dronesJOIN():
             if READY_DRONES == ALIVE_DRONES:
                 SHOW_IN_ACTION = False
                 print(f"{Fore.CYAN}{Style.BRIGHT}Figure finished. Look at that!{R}")
-                registrar_evento('Espectaculo',
+                register_event('Espectaculo',
                         f"Figura terminada {figure}",
                         f"127.0.0.1")
                 sleep(1)
@@ -520,18 +528,18 @@ def dronesRETREAT():
     global READY, PERFORMING, BOARD
     READY = False
     print(f"{WEATHER_ALERT} {Fore.RED}Sending {Style.BRIGHT}<RETREAT>{Style.NORMAL} to drones...{R}")
-    registrar_evento('Espectaculo',
+    register_event('Espectaculo',
                         f"Enviando RETREAT",
                         f"127.0.0.1")
     PERFORMING = {drone_id: {"status": True, "position": [0,0]} for drone_id in DRONES}
     
     for id in DRONES:
         BOARD[id]["status"] = 'N'
-        clave_simetrica = load_clave_simetrica(id)
+        clave_simetrica = load_symetric_key(id)
 
         # Preparar los datos para enviar
         data = {"POS": f"0 0"}
-        data_cifrada = cifrar_mensaje(json.dumps(data), clave_simetrica)
+        data_cifrada = encode_message(json.dumps(data), clave_simetrica)
 
         # Enviar datos cifrados
         droneOrdersProd.send(KTOPIC_ORDERS, value=data_cifrada, partition=DRONES[id]["partition"])
@@ -568,11 +576,14 @@ def inputWeather():
                 cities = json.load(file)
                 city = cities['ciudades'][0]
                 
-            weather_data = inputWeatherAPI(city)
-            temperature = weather_data["main"]["temp"]
-            registrar_evento('OpenWeather',
-                        f"Temperatura registrada de {city}: {temperature}",
-                        f"127.0.0.1")
+            try:
+                weather_data = inputWeatherAPI(city)
+                temperature = weather_data["main"]["temp"]
+                register_event('OpenWeather',
+                            f"Temperatura registrada de {city}: {temperature}",
+                            f"127.0.0.1")
+            except Exception:
+                temperature = 1
             READY = True
             try:
                 if int(temperature) < 0:
@@ -583,7 +594,7 @@ def inputWeather():
 
         except Exception as e:
             print(f"{MISSING}{Fore.RED} Error al obtener datos del clima: {e}.{R}")
-            registrar_evento('OpenWeather',
+            register_event('OpenWeather',
                             f"Error al obtener datos del clima: {e}",
                             f"148.251.136.139")
             dronesRETREAT()
@@ -600,8 +611,8 @@ def resetDroneStatus():
         if not BOARD[drone_id]["status"] == 'X':
             BOARD[drone_id]["status"] = 'N'
 
-    clave_simetrica = load_clave_simetrica(id)
-    data_cifrada = cifrar_mensaje(json.dumps(BOARD), clave_simetrica)
+    clave_simetrica = load_symetric_key(id)
+    data_cifrada = encode_message(json.dumps(BOARD), clave_simetrica)
 
     # Enviar datos cifrados
     droneBoardsProd.send(KTOPIC_BOARDS, value=data_cifrada)
@@ -639,7 +650,7 @@ def handleDrone(consumerCoordinates, id, forShow=True):
                     if PERFORMING[id]["status"] == True:
                         if checkTime(timerStart, timeout) and was_alive:
                             print(f"{MISSING}{Fore.MAGENTA}{Style.DIM} Drone {id} is missing.{R}")
-                            registrar_evento('Espectaculo',
+                            register_event('Espectaculo',
                                             f"Drone {id} se ha perdido",
                                             f"127.0.0.1")
                             ALIVE_DRONES -= 1
@@ -656,8 +667,8 @@ def handleDrone(consumerCoordinates, id, forShow=True):
                                     data = {"POS": f"{destination[0]} {destination[1]}"}
                                     
                                     # Preparar los datos para enviar
-                                    clave_simetrica = load_clave_simetrica(dron_sustituto)
-                                    data_cifrada = cifrar_mensaje(json.dumps(data), clave_simetrica)
+                                    clave_simetrica = load_symetric_key(dron_sustituto)
+                                    data_cifrada = encode_message(json.dumps(data), clave_simetrica)
 
                                     # Enviar datos cifrados
                                     droneOrdersProd.send(KTOPIC_ORDERS, value=data_cifrada, partition=DRONES[dron_sustituto]["partition"])
@@ -681,7 +692,7 @@ def handleDrone(consumerCoordinates, id, forShow=True):
                             if not was_alive:
                                 ALIVE_DRONES += 1
                                 was_alive = True
-                                registrar_evento('Espectaculo',
+                                register_event('Espectaculo',
                                                     f"Drone {id} ha vuelto",
                                                     f"127.0.0.1")
                                 
@@ -710,8 +721,8 @@ def handleDrone(consumerCoordinates, id, forShow=True):
                                     data = {"POS": "0 0"}
                                     
                                     # Preparar los datos para enviar
-                                    clave_simetrica = load_clave_simetrica(id)
-                                    data_cifrada = cifrar_mensaje(json.dumps(data), clave_simetrica)
+                                    clave_simetrica = load_symetric_key(id)
+                                    data_cifrada = encode_message(json.dumps(data), clave_simetrica)
 
                                     # Enviar datos cifrados
                                     droneOrdersProd.send(KTOPIC_ORDERS, value=data_cifrada, partition=DRONES[id]["partition"])
@@ -721,8 +732,8 @@ def handleDrone(consumerCoordinates, id, forShow=True):
                                     # Eliminar la asignacion del dron de reemplazo
                                     del REPLACEMENT_DRONES[id]
                                     
-                                clave_simetrica = load_clave_simetrica(id)
-                                data_cifrada = cifrar_mensaje(json.dumps(data), clave_simetrica)
+                                clave_simetrica = load_symetric_key(id)
+                                data_cifrada = encode_message(json.dumps(data), clave_simetrica)
 
                                 # Enviar datos cifrados
                                 sleep(1.5) #Para que no lleguen antes de que el dron procese la respuesta
@@ -735,8 +746,8 @@ def handleDrone(consumerCoordinates, id, forShow=True):
                             elif pos == [-3, -3]: #La recibe cuando el dron quiere checkear si el engine sigue vivo
                                 data = {"POS": "-3 -3"}
                                 # Preparar los datos para enviar
-                                clave_simetrica = load_clave_simetrica(id)
-                                data_cifrada = cifrar_mensaje(json.dumps(data), clave_simetrica)
+                                clave_simetrica = load_symetric_key(id)
+                                data_cifrada = encode_message(json.dumps(data), clave_simetrica)
 
                                 # Enviar datos cifrados
                                 droneOrdersProd.send(KTOPIC_ORDERS, value=data_cifrada, partition=DRONES[id]["partition"])
@@ -748,8 +759,8 @@ def handleDrone(consumerCoordinates, id, forShow=True):
                             
                             display.update(BOARD)
                             
-                            clave_simetrica = load_clave_simetrica(1)
-                            data_cifrada = cifrar_mensaje(json.dumps(BOARD), clave_simetrica)
+                            clave_simetrica = load_symetric_key(1)
+                            data_cifrada = encode_message(json.dumps(BOARD), clave_simetrica)
 
                             # Enviar datos cifrados
                             droneBoardsProd.send(KTOPIC_BOARDS, value=data_cifrada)
@@ -757,8 +768,8 @@ def handleDrone(consumerCoordinates, id, forShow=True):
                         
                         else:
                             partition = message.partition  # Obtener la particion del mensaje
-                            print(f"Drone {id} en la particion {partition}, No te entiendo, clave {load_clave_simetrica(id)}")
-                            registrar_evento('Error al descifrar mensaje',
+                            print(f"Drone {id} en la particion {partition}, No te entiendo, clave {load_symetric_key(id)}")
+                            register_event('Error al descifrar mensaje',
                                             f"Drone {id}, No te entiendo",
                                             'localhost')
                             
@@ -776,8 +787,8 @@ def handleDrone(consumerCoordinates, id, forShow=True):
                                         data = {"POS": f"{destination[0]} {destination[1]}"}
                                         
                                         # Preparar los datos para enviar
-                                        clave_simetrica = load_clave_simetrica(id)
-                                        data_cifrada = cifrar_mensaje(json.dumps(data), clave_simetrica)
+                                        clave_simetrica = load_symetric_key(id)
+                                        data_cifrada = encode_message(json.dumps(data), clave_simetrica)
 
                                         # Enviar datos cifrados
                                         droneOrdersProd.send(KTOPIC_ORDERS, value=data_cifrada, partition=DRONES[id]["partition"])
@@ -793,7 +804,7 @@ def handleDrone(consumerCoordinates, id, forShow=True):
 
             except Exception as e:
                 print("Error inesperado: ",e)
-                registrar_evento('Espectaculo',
+                register_event('Espectaculo',
                                 f"Error inesperado: {e}",
                                 f"127.0.0.1")
                 continue
@@ -801,14 +812,14 @@ def handleDrone(consumerCoordinates, id, forShow=True):
 
     except KeyError as e:
         print("Ha ocurrido un error durante la lectura de los Drones: ",e)
-        registrar_evento('Espectaculo',
+        register_event('Espectaculo',
                             f"Ha ocurrido un error durante la lectura de los Drones: {e}",
                             f"127.0.0.1")
         
         pass
     except Exception as e:
         print("Error: ",e)
-        registrar_evento('Espectaculo',
+        register_event('Espectaculo',
                         f"Error: {e}",
                         f"127.0.0.1")
         pass
@@ -851,6 +862,11 @@ def startADEngine():
 
         display = Display()
         display.start()
+        
+        if not FIGURES:
+            print(f"{ERROR} No figures loaded. Add a figure to '{FIG_FILE}' to start the show.")
+            return
+        
         figure = FIGURES[0]["Drones"]
         destinos = {str(a["ID"]):[int(x) for x in a["POS"].split(',')] for a in figure}
                 
@@ -874,7 +890,7 @@ def startADEngine():
                     del FIGURES[0]
                     
                     print(f"{SHOW_START}{Fore.CYAN} Beginning figure {figNombre}.{R}")
-                    registrar_evento('Espectaculo',
+                    register_event('Espectaculo',
                             f"Iniciando espectaculo con figura {figNombre}",
                             f"127.0.0.1")
                     resetDroneStatus()
@@ -898,7 +914,7 @@ def auth_drone():
         client_ip = request.remote_addr
         
         idSent = datas['ID']
-        tokenSent = datas['token'] #El Dron ya ha hecho su hash de la misma manera que lo hizo el registry
+        tokenSent = datas['token']
         aliasSent = datas['alias']
         
         try:
@@ -913,45 +929,44 @@ def auth_drone():
         
         if datetime.now() > token_expiry:
             print(f"{NEW_CONNECTION}{Fore.MAGENTA} Drone {idSent}:{aliasSent} {Fore.RED}{Style.BRIGHT}Token expired.{R}")
-            registrar_evento('Autenticacion',
-                            f"Autenticacion fallida, token expirado",
+            register_event('Authentication',
+                            f"Authentication failed, token expired",
                             f"{client_ip}")
             
-            raise Exception('El token ha expirado')
+            raise Exception('Teken expired')
         else:
             hashed_token = base64.b64decode(tokenDB.encode('utf-8'))
         
             if not bcrypt.checkpw(tokenSent.encode('utf-8'), hashed_token):
                 print(f"{NEW_CONNECTION}{Fore.MAGENTA} Drone {idSent} {Fore.RED}{Style.BRIGHT}failed to authenticate.{R}")
-                registrar_evento('Autenticacion',
-                            f"Autenticacion de  Drone {idSent} fallida",
+                register_event('Authentication',
+                            f"Authentication from Drone {idSent} failed",
                             f"{client_ip}")
                 
-                raise Exception('El token no es valido')
+                raise Exception('Token is not valid')
             
             global PERFORMING
             
-            clave_simetrica = Fernet.generate_key()
-            print('Clave simetrica: ', clave_simetrica)
-            guardar_clave_simetrica(idSent, clave_simetrica)
+            symetric_key = Fernet.generate_key()
+            print('Clave simetrica: ', symetric_key)
+            save_symetric_key(idSent, symetric_key)
 
             if idSent in DRONES:
                 
                 if (BOARD[idSent]["status"] == 'X') or (BOARD[idSent]["status"] == 'N' and SHOW_IN_ACTION):
                     print(f"{NEW_CONNECTION}{Fore.MAGENTA} Drone {idSent}:{aliasSent} has reestablished connection (2).{R}")
-                    registrar_evento('Autenticacion',
-                            f"Autenticacion de  Drone {idSent} exitosa (2)",
+                    register_event('Authentication',
+                            f"Authentication from Drone {idSent} successful (2)",
                             f"{client_ip}")
                     
                     partition = DRONES[idSent]["partition"]
                     pos_recovery = BOARD[idSent]["POS"]
-                    #pos_destino = PERFORMING[idSent]["position"]
                     
                     response_data = {
                         'code': '2', 
                         'partition': partition,
                         'pos_recovery': str(pos_recovery),
-                        'clave_simetrica': clave_simetrica.decode(),
+                        'clave_simetrica': symetric_key.decode(),
                     }
                     response = {
                         'error' : False,
@@ -966,14 +981,14 @@ def auth_drone():
                     print(f"{NEW_CONNECTION}{Fore.MAGENTA} Drone {idSent}:{aliasSent} has reestablished connection (1).{R}")
                     partition = DRONES[idSent]["partition"]
                     
-                    registrar_evento('Autenticacion',
-                            f"Autenticacion de  Drone {idSent} reestablecida",
+                    register_event('Authentication',
+                            f"Authentication from Drone {idSent} reestablished",
                             f"127.0.0.1")
                     
                     response_data = {
                         'code': '1', 
                         'partition': partition,
-                        'clave_simetrica': clave_simetrica.decode(),
+                        'clave_simetrica': symetric_key.decode(),
                     }
                     response = {
                         'error' : False,
@@ -985,7 +1000,6 @@ def auth_drone():
 
             global DRONE_COUNT, ALIVE_DRONES
             
-            # Inicializar el estado y la posicion del drone en el BOARD
             BOARD[idSent] = {"status": 'N', "POS": [0, 0]}
             
             particion_asignada = (int(idSent) - 1)
@@ -995,8 +1009,8 @@ def auth_drone():
 
             print(f"{NEW_CONNECTION}{Fore.MAGENTA} Drone {idSent}:{aliasSent} {Fore.GREEN}{Style.BRIGHT}authenticated (1).{R}")
             
-            registrar_evento('Autenticacion',
-                            f"Autenticacion de  Drone {idSent} exitosa (1)",
+            register_event('Authentication',
+                            f"Authentication de  Drone {idSent} exitosa (1)",
                             f"{client_ip}")
             
             response_data = {
@@ -1015,7 +1029,7 @@ def auth_drone():
                 auto_offset_reset='latest',
                 enable_auto_commit=True,
                 group_id='engine',
-                value_deserializer=lambda x: descifrar_mensaje(x, load_clave_simetrica(idSent))
+                value_deserializer=lambda x: decode_message(x, load_symetric_key(idSent))
             )
 
             consumerCoordinates.assign([TopicPartition(KTOPIC_MOVES, DRONES[idSent]["partition"])])

@@ -1,1 +1,7 @@
 venvDrone/
+__pycache__/
+claves_Engine/
+claves_Drone/
+log/
+login_para_Drones/
+drone_credentials.json
