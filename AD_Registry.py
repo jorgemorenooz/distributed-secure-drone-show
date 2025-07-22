@@ -7,7 +7,6 @@ from sys import argv
 from colorama import init as colorama_init
 from colorama import Fore, Style
 from typing import Optional
-from getpass import getpass
 from flask import Flask, request
 from flask import jsonify
 # from flask_mysqldb import MySQL
@@ -26,8 +25,8 @@ ERROR = f"{Fore.RED}{Style.BRIGHT}[SHUTDOWN]{R}"
 NEWCON = f"{Fore.CYAN}{Style.BRIGHT}[NEW CONNECTION]{R}"
 MISSING = f"{Fore.RED}{Style.BRIGHT}[MISSING]{R}"
 
-KEY_FILE = './certificados/clave_privada_registry.pem'
-CERT_FILE = './certificados/certificado_registry.crt'
+KEY_FILE = './cert/private_key_registry.pem'
+CERT_FILE = './cert/certificate_registry.crt'
 
 
 colorama_init()
@@ -172,7 +171,7 @@ def startADRegistry():
 
 @app.route('/index')
 def index():
-    return "Hello, World!"
+    return "Hello, I am the Registry!"
 
 @app.route('/add_drone', methods=['POST'])
 def add_drone():
@@ -191,11 +190,10 @@ def add_drone():
         encrypted_token = bcrypt.hashpw(token.encode('utf-8'), bcrypt.gensalt())
         token_expiry = datetime.now() + timedelta(seconds=20)  # Fija la caducidad del token
         
-        # Convertir bytes a base64 para que sean serializables en JSON
+        # Convert from bytes to base64 in order to be serializables in JSON
         encrypted_alias_b64 = base64.b64encode(encrypted_alias).decode('utf-8')
         encrypted_token_b64 = base64.b64encode(encrypted_token).decode('utf-8')
     
-         # Lee el archivo JSON existente
         try:
             with open(BBDD_FILE, 'r') as file:
                 drones_db = json.load(file)
@@ -208,10 +206,8 @@ def add_drone():
             "expiry": str(token_expiry)
         }
         
-        # Añade la nueva entrada al diccionario y escribe en el archivo
         with open(BBDD_FILE, 'w') as file:
             json.dump(drones_db, file, indent=4)
-        # Create a response dictionary for a successful operation
         
         response_data = {
             'ID': datas['ID'], 
