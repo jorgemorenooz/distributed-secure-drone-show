@@ -6,10 +6,7 @@ with redirect_stdout(None):
     from pygame.time import Clock
     from pygame.font import SysFont
 from random import randrange
-from sys import argv
-from time import sleep
 import threading
-import os
 
 class Colors:
     NEGRO       = ( 20,  20,  20)
@@ -48,12 +45,12 @@ class Display:
         if Display.F_QUIT:
             return False
         if not isinstance(board, dict):
-            print("Error: El BOARD no es un diccionario.")
+            print("Error: El BOARD is not a dictionary.")
             return False
         
         for dron_id, dron_data in board.items():
             if "POS" not in dron_data or "status" not in dron_data:
-                print(f"Error: Datos del dron {dron_id} incompletos.")
+                print(f"Error: Data missing from Drone {dron_id}.")
                 return False
         Display.BOARD = board
         
@@ -95,8 +92,12 @@ def displayBoardENGINE():
             if event.type==QUIT:               
                 Display.F_QUIT = True
 
-        # resetea pantalla
-        backgroundImage = pygame.image.load('./img/Disney_Pictures.jpeg')
+        try:
+            backgroundImage = pygame.image.load('./img/Disney_Pictures.jpeg')
+        except Exception:
+            backgroundImage = pygame.Surface((anchoVentana, altoVentana))
+            backgroundImage.fill((30, 30, 30))
+
         backgroundImage = pygame.transform.scale(backgroundImage, (anchoVentana, altoVentana))
         screen.blit(backgroundImage, (0, 0))
 
@@ -109,18 +110,24 @@ def displayBoardENGINE():
                 fil = dron_data["POS"][1]
                 status = dron_data["status"]
                 
-                droneImg = pygame.image.load('./img/drone-amarillo.png')
-                droneImg = pygame.transform.scale(droneImg, (TAM, TAM))
+                try:
+                    droneImg = pygame.image.load('./img/drone-yellow.png')
+                    droneImg = pygame.transform.scale(droneImg, (TAM, TAM))
+                except Exception:
+                    droneImg = pygame.Surface((TAM, TAM), pygame.SRCALPHA)
+                    center = (TAM // 2, TAM // 2)
+                    pygame.draw.circle(droneImg, (255, 255, 0), center, TAM // 6)  # small yellow dot
+
                 
-                # Dibujar la imagen del dron en la posición correspondiente
+                # Draw the drone on its current position
                 screen.blit(droneImg, ((TAM + MARGEN) * col + PADDING, (TAM + MARGEN) * fil + PADDING))
                 
                 text_color = Colors.BLANCO if status == 'N' else (Colors.VERDE if status == 'Y' else Colors.ROJO)
-                # Escribir la ID del dron encima de la imagen
+                # Drone ID over the picture
                 screen.blit(myFont.render(str(dron_id), True, text_color),
                             ((TAM + MARGEN) * col + PADDING + TAM / 4 - TAM / 8, (TAM + MARGEN) * fil + PADDING + TAM / 4 - TAM / 8))
             else:
-                print(f"Datos incompletos para el dron {dron_id}.")
+                print(f"Error: Data missing from Drone {dron_id}.")
 
 
         # update screen
@@ -164,8 +171,12 @@ def displayBoardDRONE():
             if event.type==QUIT:               
                 Display.F_QUIT = True
 
-        # resetea pantalla
-        backgroundImage = pygame.image.load('./img/Disney_Pictures.jpeg')
+        try:
+            backgroundImage = pygame.image.load('./img/Disney_Pictures.jpeg')
+        except Exception:
+            backgroundImage = pygame.Surface((anchoVentana, altoVentana))
+            backgroundImage.fill((30, 30, 30))
+            
         backgroundImage = pygame.transform.scale(backgroundImage, (anchoVentana, altoVentana))
         screen.blit(backgroundImage, (0, 0))
 
@@ -173,23 +184,28 @@ def displayBoardDRONE():
             draw.circle(screen, (180, 180, 180), (estrella[0], estrella[1]), randrange(2))
 
         for dron in dict(Display.BOARD):
-                #print(f"fasd :{Display.BOARD[dron]}")
-                id = dron
-                col = Display.BOARD[dron]["POS"][0]
-                fil = Display.BOARD[dron]["POS"][1]
-                status = Display.BOARD[dron]["status"]
+            #print(f"fasd :{Display.BOARD[dron]}")
+            id = dron
+            col = Display.BOARD[dron]["POS"][0]
+            fil = Display.BOARD[dron]["POS"][1]
+            status = Display.BOARD[dron]["status"]
 
-                droneImg = pygame.image.load('./img/drone-amarillo.png')
+            try:
+                droneImg = pygame.image.load('./img/drone-yellow.png')
                 droneImg = pygame.transform.scale(droneImg, (TAM, TAM))
-                
-                # Dibujar la imagen del dron en la posición correspondiente
-                screen.blit(droneImg, ((TAM + MARGEN) * col + PADDING, (TAM + MARGEN) * fil + PADDING))
-                
-                
-                text_color = Colors.BLANCO if status == 'N' else (Colors.VERDE if status == 'Y' else Colors.ROJO)
-                # Escribir la ID del dron encima de la imagen
-                screen.blit(myFont.render(str(id), True, text_color),
-                            ((TAM + MARGEN) * col + PADDING + TAM / 4 - TAM / 8, (TAM + MARGEN) * fil + PADDING + TAM / 4 - TAM / 8))
+            except Exception:
+                droneImg = pygame.Surface((TAM, TAM), pygame.SRCALPHA)
+                center = (TAM // 2, TAM // 2)
+                pygame.draw.circle(droneImg, (255, 255, 0), center, TAM // 6)  # small yellow dot
+            
+            # Draw the drone on its current position
+            screen.blit(droneImg, ((TAM + MARGEN) * col + PADDING, (TAM + MARGEN) * fil + PADDING))
+            
+            
+            text_color = Colors.BLANCO if status == 'N' else (Colors.VERDE if status == 'Y' else Colors.ROJO)
+            # Drone ID over the picture
+            screen.blit(myFont.render(str(id), True, text_color),
+                        ((TAM + MARGEN) * col + PADDING + TAM / 4 - TAM / 8, (TAM + MARGEN) * fil + PADDING + TAM / 4 - TAM / 8))
 
         display.flip()
         reloj.tick(40)
