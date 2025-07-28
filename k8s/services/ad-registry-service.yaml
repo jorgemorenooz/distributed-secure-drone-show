@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: ad-registry
+spec:
+  selector:
+    app: ad-registry
+  type: NodePort
+  ports:
+  - name: https
+    port: 5001
+    targetPort: 5001
+    nodePort: 30501
+  - name: registry-socket
+    port: 8082
+    targetPort: 8082
+    nodePort: 30502

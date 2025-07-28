@@ -1,0 +1,32 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ad-registry
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ad-registry
+  template:
+    metadata:
+      labels:
+        app: ad-registry
+    spec:
+      containers:
+      - name: registry
+        image: jorgemorenooz/ad_registry:latest
+        ports:
+        - containerPort: 5001
+        - containerPort: 8082
+        volumeMounts:
+        - name: cert-volume
+          mountPath: /app/cert
+        - name: credentials-volume
+          mountPath: /app/drone_data
+      volumes:
+      - name: cert-volume
+        secret:
+          secretName: ad-registry-certs
+      - name: credentials-volume
+        persistentVolumeClaim:
+          claimName: shared-drone-db

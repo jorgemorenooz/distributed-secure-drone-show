@@ -35,7 +35,7 @@ Art with Drones is a distributed system simulating a coordinated drone light sho
 # 🚀 How to Run
 ## 1. Prerequisites
 - Python 3.8+
-- Apache Kafka & Zookeeper
+- Apache Kafka & Zookeeper (You can check for downloads at https://kafka.apache.org/downloads)
 - Required Python packages:
 ```bash
 pip install -r requirements.txt
@@ -93,3 +93,23 @@ Join show only:
 ```bash
 python AD_Drone.py localhost:8081 localhost:9092 localhost:8082 -ea 4:delta
 ```
+
+
+# 🐳 Containerization
+kubectl apply -f ./k8s/zookeeper-deployment.yaml
+kubectl apply -f ./k8s/zookeeper-service.yaml
+
+kubectl apply -f ./k8s/kafka-deployment.yaml
+kubectl apply -f ./k8s/kafka-service.yaml
+
+kubectl create secret generic ad-registry-certs \
+  --from-file=cert=./cert/certificate_registry.crt \
+  --from-file=key=./cert/private_key_registry.pem
+
+docker build -t jorgemorenooz/ad_engine:latest .
+docker push jorgemorenooz/ad_engine:latest
+kubectl rollout restart deployment ad-engine
+
+docker build -t jorgemorenooz/ad_drone:latest .
+docker push jorgemorenooz/ad_drone:latest
+kubectl rollout restart statefulset ad-drone 

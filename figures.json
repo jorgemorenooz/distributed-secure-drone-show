@@ -1,7 +1,7 @@
 {
   "figuras": [
     {
-      "Nombre": "Cuadrado Básico",
+      "Nombre": "Cuadrado Basico",
       "Drones": [
         { "ID": 1, "POS": "2,2" },
         { "ID": 2, "POS": "2,5" },
@@ -10,7 +10,7 @@
       ]
     },
     {
-      "Nombre": "Línea Horizontal",
+      "Nombre": "Linea Horizontal",
       "Drones": [
         { "ID": 1, "POS": "3,3" },
         { "ID": 2, "POS": "3,4" },

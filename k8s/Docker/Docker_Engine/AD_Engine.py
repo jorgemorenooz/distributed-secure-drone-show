@@ -9,12 +9,9 @@ from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 from colorama import init as colorama_init
 from colorama import Fore, Style
-from getpass import getpass
 from typing import Optional
-from AD_Display import Display
 from flask import Flask, request
 from flask import jsonify
-# from flask_mysqldb import MySQL
 from flask_cors import CORS
 import requests
 from datetime import datetime
@@ -29,8 +26,8 @@ log = logging.getLogger('werkzeug')
 log.setLevel(logging.ERROR)
 
 FORMAT = 'utf-8'
-KEY_FILE = './cert/private_key_engine.pem'
-CERT_FILE = './cert/certificate_engine.crt'
+KEY_FILE = './cert/key'
+CERT_FILE = './cert/cert'
 OPEN_WEATHER_KEY = '000000'
 temperature = 0
 new_logs  = []
@@ -74,7 +71,7 @@ if len(argv) >=4:
     BROKER_ADDR = (broker[0], int(broker[1]))
     ASSIGN_FREELY = len(argv) == 6 and argv[4] == '--free'
 
-    DB_FILE = 'drone_credentials.json'
+    DB_FILE = "/app/drone_data/drones.json"
     SOCK_FORMAT = 'utf-8'
     FIG_FILE = 'figures.json'
     DRONE_RECOVERY = './drone_recovery'
@@ -456,7 +453,7 @@ def dronesJOIN():
 
     if READY:
         SHOW_IN_ACTION = True
-        #print(f"destinos: {destinos}")
+
         print(f"{SHOW_START}{Fore.CYAN} Sending {Style.BRIGHT}<JOIN>{Style.NORMAL} to drones...{R}")
         
         DRONES_WITH_POS = []
@@ -756,7 +753,7 @@ def handleDrone(consumerCoordinates, id, forShow=True):
                                 BOARD[id]["POS"] = pos
                                 # Aqui no hace falta actualizar BOARD[id]["status"]
                             
-                            display.update(BOARD)
+                            #display.update(BOARD)
                             
                             clave_simetrica = load_symetric_key(1)
                             data_cifrada = encode_message(json.dumps(BOARD), clave_simetrica)
@@ -825,13 +822,13 @@ def handleDrone(consumerCoordinates, id, forShow=True):
 
 def printALLSET():
     print(f"{ALLSET}")
-    print(f"{Fore.MAGENTA}{Style.DIM}Press {Style.NORMAL}ENTER{Style.DIM} to start. {Style.NORMAL}Ctrl+C{Style.DIM} to SHUTDOWN.{R}")
-    getpass('')
+    print(f"{Fore.MAGENTA}{Style.DIM}[ENGINE READY] Auto-start enabled in Kubernetes.{R}")
+
 
 def startADEngine():
     
     try:
-        global droneOrdersProd, droneBoardsProd, display, observer, destinos, figure
+        global droneOrdersProd, droneBoardsProd, observer, destinos, figure #display
         
         print(f"{STARTING}{Fore.GREEN} Initializing AD_Engine{R}")
 
@@ -859,8 +856,8 @@ def startADEngine():
         weatherThread = threading.Thread(target=inputWeather)
         weatherThread.start()
 
-        display = Display()
-        display.start()
+        #display = Display()
+        #display.start()
         
         if not FIGURES:
             print(f"{ERROR} No figures loaded. Add a figure to '{FIG_FILE}' to start the show.")
@@ -871,32 +868,47 @@ def startADEngine():
                 
         # main loop
         while True:
-            
             try:
                 if not READY:
                     sleep(2)
                     raise ValueError
 
                 printALLSET()
+
                 if len(FIGURES) == 0:
                     print(f"{Style.BRIGHT}No shows scheduled{Style.RESET_ALL}. Add some figures to file {Fore.YELLOW}{Style.BRIGHT}{FIG_FILE}{R} to begin.")
-                
-                else:
-                    figure = FIGURES[0]["Drones"]
-                    destinos = {str(a["ID"]):[int(x) for x in a["POS"].split(',')] for a in figure}
+                    sleep(10)
+                    continue
 
-                    figNombre = FIGURES[0]["Nombre"]
-                    del FIGURES[0]
-                    
-                    print(f"{SHOW_START}{Fore.CYAN} Beginning figure {figNombre}.{R}")
-                    register_event('Espectaculo',
-                            f"Iniciando espectaculo con figura {figNombre}",
-                            f"127.0.0.1")
-                    resetDroneStatus()
-                    dronesJOIN()
+                figure = FIGURES[0]["Drones"]
+                required_ids = [str(a["ID"]) for a in figure]
+                figNombre = FIGURES[0]["Nombre"]
+
+                # Wait until all required drones are connected
+                while True:
+                    connected_ids = list(DRONES.keys())
+                    missing = [id for id in required_ids if id not in connected_ids]
+                    if not missing:
+                        break
+                    print(f"{Fore.YELLOW}Waiting for drones: {', '.join(missing)}{R}")
+                    sleep(5)
+
+                # Now it's safe to start
+                destinos = {str(a["ID"]): [int(x) for x in a["POS"].split(',')] for a in figure}
+                del FIGURES[0]
+
+                print(f"{SHOW_START}{Fore.CYAN} Beginning figure {figNombre}.{R}")
+                register_event('Show',
+                                f"Starting show with figure {figNombre}",
+                                f"127.0.0.1")
+                resetDroneStatus()
+                dronesJOIN()
 
             except ValueError:
                 pass
+            except Exception as e:
+                print(f"{ERROR} Unexpected error in show loop: {e}")
+                sleep(5)
     except KeyboardInterrupt:
         raise KeyboardInterrupt
         
@@ -1100,7 +1112,7 @@ try:
 except KeyboardInterrupt:
     print(f"\r{SHUTDOWN}")
     SHUTDOWN_SYSTEM = True
-    display.stop()
+    #display.stop()
     observer.stop()
     try:
         if server.fileno() != -1:
